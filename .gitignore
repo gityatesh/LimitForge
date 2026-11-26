@@ -1,0 +1,14 @@
+# secrets
+.env
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+# ml model files (rebuilt automatically)
+limitforge_service/models/*.joblib
+# os
+.DS_Store
+# node (frontend later)
+node_modules/
+.next/
