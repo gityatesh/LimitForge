@@ -1,11 +1,12 @@
-"""Creates the FastAPI app. Routers get plugged in here as we build them."""
+"""Creates the FastAPI app and plugs in every router under /api/v1."""
 import logging
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.core.errors import register_error_handlers
+from app.routers import admin, auth
 
 logging.basicConfig(level=logging.INFO)
 
@@ -22,6 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 register_error_handlers(app)
+
+api = APIRouter(prefix="/api/v1")
+for module in (auth, admin):
+    api.include_router(module.router)
+app.include_router(api)
 
 
 @app.get("/health", tags=["health"])

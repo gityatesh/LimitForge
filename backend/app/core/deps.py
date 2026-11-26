@@ -7,6 +7,7 @@ changed role takes effect immediately, even if the old token has not expired yet
 import uuid
 
 from fastapi import Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -16,16 +17,24 @@ from app.db import get_db
 from app.models import AccountStatus, User
 
 
-def _extract_token(request: Request) -> str | None:
+# Declaring this scheme makes Swagger show the "Authorize" button.
+# auto_error=False: if the header is missing we fall back to the cookie instead of failing.
+bearer_scheme = HTTPBearer(auto_error=False, description="Paste the access_token from /auth/login")
+
+
+def _extract_token(request: Request, creds: HTTPAuthorizationCredentials | None) -> str | None:
     """Accept 'Authorization: Bearer <token>' (Swagger, tests) or the httpOnly cookie (browser)."""
-    auth = request.headers.get("Authorization", "")
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
+    if creds and creds.scheme.lower() == "bearer":
+        return creds.credentials
     return request.cookies.get(settings.cookie_name)
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    token = _extract_token(request)
+def get_current_user(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    token = _extract_token(request, creds)
     payload = decode_access_token(token) if token else None
     if not payload:
         raise AppError(401, "UNAUTHENTICATED", "Please sign in to continue.")
