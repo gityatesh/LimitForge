@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.core.errors import register_error_handlers
-from app.routers import admin, auth
+from app.routers import admin, auth, profile, rules
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,7 +25,7 @@ app.add_middleware(
 register_error_handlers(app)
 
 api = APIRouter(prefix="/api/v1")
-for module in (auth, admin):
+for module in (auth, admin, profile, rules):
     api.include_router(module.router)
 app.include_router(api)
 

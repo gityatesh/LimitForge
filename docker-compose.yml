@@ -24,6 +24,16 @@ services:
       timeout: 3s
       retries: 20
 
+  bureau:
+    build: ./bureau_service
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   mailpit:
     image: axllent/mailpit:latest
     ports:
