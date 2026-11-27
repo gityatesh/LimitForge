@@ -66,3 +66,62 @@ def get_active_rule_version(db: Session) -> RuleVersion:
     if rv is None:
         raise AppError(409, "NO_ACTIVE_RULE", "No active decision rule is configured. Ask an administrator.")
     return rv
+
+
+
+def _f(v) -> float | None:
+    return float(v) if v is not None else None
+
+
+def evaluate_routing(application, profile, assessment, bureau, config: dict) -> dict:
+    """Decide who may finalise this case, and WHY. Pure function: easy to unit-test.
+
+    escalation_required  -> a Bank Manager must decide
+    analyst_can_decide   -> an analyst may finalise (RBAC Condition 1)
+    """
+    requested = _f(application.requested_credit_limit) or 0.0
+    income = _f(profile.annual_income) or 0.0
+    debt = _f(profile.existing_debt) or 0.0
+    dti = round(debt / income, 4) if income > 0 else None
+
+    ai_ok = assessment is not None and assessment.assessment_status == "COMPLETED"
+    risk = _f(assessment.risk_score) if ai_ok else None
+    bureau_ok = bureau is not None and bureau.report_status == "COMPLETED"
+    score = bureau.bureau_score if bureau_ok else None
+
+    high_risk = risk is not None and risk >= config["high_risk_score_threshold"]
+    dti_breach = dti is None or dti > config["max_dti_ratio"]
+    bureau_breach = (not bureau_ok) or score is None or score < config["min_bureau_score"]
+
+    reasons: list[str] = []
+    if not ai_ok:
+        reasons.append("No completed AI assessment (missing or FAILED)")
+    if requested > config["manager_escalation_limit"]:
+        reasons.append(f"Requested limit above manager escalation limit ({config['manager_escalation_limit']:,.0f})")
+    if high_risk:
+        reasons.append(f"AI risk {risk:.2f} at or above threshold {config['high_risk_score_threshold']}")
+    if dti_breach:
+        reasons.append(f"Debt-to-income {dti if dti is not None else 'n/a'} above maximum {config['max_dti_ratio']}")
+    if not bureau_ok:
+        reasons.append("Credit bureau report unavailable (FAILED)")
+    elif score is None:
+        reasons.append("No credit history at the bureau")
+    elif score < config["min_bureau_score"]:
+        reasons.append(f"Bureau score {score} below minimum {config['min_bureau_score']}")
+
+    blockers = list(reasons)
+    if requested > config["max_auto_approval_limit"]:
+        blockers.append(f"Requested limit above analyst ceiling ({config['max_auto_approval_limit']:,.0f})")
+
+    return {
+        "escalation_required": bool(reasons),
+        "analyst_can_decide": not blockers,
+        "reasons": reasons,
+        "analyst_blockers": blockers,
+        "high_risk": high_risk,
+        "dti_breach": dti_breach,
+        "bureau_breach": bureau_breach,
+        "assessment_completed": ai_ok,
+        "bureau_completed": bureau_ok,
+        "dti_ratio": dti,
+    }
